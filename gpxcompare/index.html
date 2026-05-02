@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mkUltra.run | GPX Vert Comparison</title>
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            padding: 15px; 
+            max-width: 1000px; 
+            margin: auto; 
+            color: #333; 
+            box-sizing: border-box; 
+        }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;}
+        h1 { font-size: 1.8rem; margin-bottom: 5px; }
+        .subtitle { color: gray; font-size: 0.9rem; font-style: italic; margin-top: 0; }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        @media (max-width: 600px) {
+            .controls-grid { grid-template-columns: 1fr; gap: 10px; }
+        }
+        
+        .upload-box { display: flex; flex-direction: column; }
+        .upload-box label { font-weight: bold; margin-bottom: 5px; color: #444; }
+        
+        input[type="file"], select { 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            width: 100%; 
+            box-sizing: border-box; 
+            font-size: 1rem; 
+            background: white;
+        }
+
+        .view-mode-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .view-mode-container select {
+            width: auto;
+            min-width: 200px;
+            display: inline-block;
+        }
+
+        #output { 
+            text-align: center;
+            padding: 10px; 
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #d63131;
+            min-height: 24px;
+        }
+        
+        #plot-area { 
+            width: 100%; 
+            display: flex; 
+            justify-content: center;
+            overflow-x: auto; 
+        }
+        #plot-area img, #plot-area canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        py-config { display: none !important; }
+        .loading { font-style: italic; color: #666; animation: pulse 2s infinite; font-weight: normal;}
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Race Vert Comparison</h1>
+        <p class="subtitle">Upload two GPX files to compare gradient profiles.</p>
+    </div>
+
+    <div class="controls-grid">
+        <div class="upload-box">
+            <label for="file-a">🏃 Race A (Left)</label>
+            <input type="file" id="file-a" accept=".gpx">
+        </div>
+        <div class="upload-box">
+            <label for="file-b">🏃 Race B (Right)</label>
+            <input type="file" id="file-b" accept=".gpx">
+        </div>
+    </div>
+
+    <div class="view-mode-container">
+        <label for="view-mode" style="font-weight: bold; margin-right: 10px;">Comparison Metric:</label>
+        <select id="view-mode">
+            <option value="km">Distance (km)</option>
+            <option value="perc">Percentage (%)</option>
+        </select>
+    </div>
+    
+    <div id="output">
+        <span class="loading">Initialising mkUltra engine...</span>
+    </div>
+    <div id="plot-area"></div>
+
+    <py-config>
+        packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
+        [[fetch]]
+        files = ["../gpx2vert/Logo.png"]
+    </py-config>
+
+    <script type="py">
+        from pyscript import display, when, document
+        import gpxpy
+        import pandas as pd
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import LinearSegmentedColormap
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        import re
+        import os
+
+        # --- GLOBAL STATE ---
+        state = {
+            "df_a": None, "name_a": "Race A", "dist_a": 0,
+            "df_b": None, "name_b": "Race B", "dist_b": 0,
+            "metric": "km"
+        }
+
+        SMOOTHING_WINDOW = 10
+        BINS = [-np.inf, -22.5, -17.5, -12.5, -7.5, -2.5, 2.5, 7.5, 12.5, 17.5, 22.5, np.inf]
+        LABELS = ["-27.5 to -22.5 %", "-22.5 to -17.5 %", "-17.5 to -12.5 %", "-12.5 to -7.5 %", "-7.5 to -2.5 %", "-2.5 to 2.5 %", "2.5 to 7.5 %", "7.5 to 12.5 %", "12.5 to 17.5 %", "17.5 to 22.5 %", "22.5 to 27.5 %"]
+        CUSTOM_COLORS = ["#803131", "#d63131", "#e77d31", "#efe331", "#d3d388", "#31d431", "#7fd1af", "#4ee6e6", "#3197e9", "#3b36db", "#682d94"]
+
+        display("✅ Engine ready. Upload both GPX files to generate the comparison.", target="output", append=False)
+
+        def process_gpx_data(gpx_data):
+            gpx = gpxpy.parse(gpx_data)
+            cumulative_dist, elevations, points = [0.0], [], []
+            
+            for track in gpx.tracks:
+                for segment in track.segments:
+                    points.extend(segment.points)
+
+            for i, point in enumerate(points):
+                elevations.append(point.elevation or 0.0)
+                if i > 0:
+                    dist = points[i-1].distance_2d(point)
+                    cumulative_dist.append(cumulative_dist[-1] + dist)
+
+            df = pd.DataFrame({'cum_dist': cumulative_dist, 'ele': elevations})
+            df['ele_smooth'] = df['ele'].rolling(window=SMOOTHING_WINDOW, center=True, min_periods=1).mean()
+            df['dist_diff'] = df['cum_dist'].diff()
+            df['ele_diff'] = df['ele_smooth'].diff()
+            df['gradient'] = np.where(df['dist_diff'] > 1.0, (df['ele_diff'] / df['dist_diff']) * 100, 0)
+            df['gradient'] = df['gradient'].replace([np.inf, -np.inf], 0).fillna(0)
+
+            df['Bin'] = pd.cut(df['gradient'], bins=BINS, labels=LABELS, right=False)
+            summary = df.groupby('Bin', observed=False)['dist_diff'].sum().reset_index()
+            summary.rename(columns={'dist_diff': 'Distance_km'}, inplace=True)
+            summary['Distance_km'] = summary['Distance_km'] / 1000.0
+            
+            total_dist = df['cum_dist'].max() / 1000.0
+            summary['Perc'] = (summary['Distance_km'] / total_dist * 100) if total_dist > 0 else 0
+            summary['sort'] = summary['Bin'].apply(lambda x: float(re.findall(r"[-+]?\d*\.?\d+", str(x))[0]))
+            
+            return summary.sort_values('sort').reset_index(drop=True), total_dist
+
+        def draw_chart():
+            if state["df_a"] is None or state["df_b"] is None:
+                return # Need both files
+
+            plt.close('all')
+            fig, ax = plt.subplots(figsize=(12, 9))
+            
+            x_col = 'Distance_km' if state["metric"] == "km" else 'Perc'
+            unit = "km" if state["metric"] == "km" else "%"
+
+            merged = pd.merge(state["df_a"][['Bin', x_col, 'sort']], state["df_b"][['Bin', x_col]], on='Bin', how='outer', suffixes=('_a', '_b')).fillna(0)
+            merged['delta'] = merged[f'{x_col}_b'] - merged[f'{x_col}_a']
+            merged = merged.sort_values('sort').reset_index(drop=True)
+
+            cmap = LinearSegmentedColormap.from_list("vv", CUSTOM_COLORS[::-1], N=len(LABELS))
+            colors = [cmap(i) for i in range(len(LABELS))]
+            y_pos = np.arange(len(merged))
+
+            # Left Bars (Race A - Negative layout)
+            bars_a = ax.barh(y_pos, -merged[f'{x_col}_a'], color=colors, height=0.7)
+            # Right Bars (Race B - Positive layout)
+            bars_b = ax.barh(y_pos, merged[f'{x_col}_b'], color=colors, height=0.7)
+
+            max_val = max(merged[f'{x_col}_a'].max(), merged[f'{x_col}_b'].max())
+            axis_range = max_val * 1.5
+            ax.set_xlim(-axis_range, axis_range)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(merged['Bin'], fontweight='bold')
+
+            # Annotations on bars
+            for i in range(len(merged)):
+                val_a = merged.loc[i, f'{x_col}_a']
+                val_b = merged.loc[i, f'{x_col}_b']
+                delta = merged.loc[i, 'delta']
+
+                if val_a > 0.05:
+                    ax.text(-val_a - (max_val * 0.02), i, f"{val_a:.1f}{unit}", va='center', ha='right', fontsize=9)
+                if val_b > 0.05:
+                    ax.text(val_b + (max_val * 0.02), i, f"{val_b:.1f}{unit}", va='center', ha='left', fontsize=9)
+
+                # Delta column on far right
+                if abs(delta) > 0.05:
+                    color = "black" if abs(delta) <= 0.1 else ("#d63131" if delta > 0 else "#3197e9")
+                    prefix = "+" if delta > 0 else ""
+                    ax.text(axis_range * 0.95, i, f"{prefix}{delta:.1f}{unit}", va='center', ha='right', color=color, fontweight='bold', fontsize=10)
+
+            # Titles and Headers
+            ax.text(-axis_range * 0.5, len(merged), f"{state['name_a']}\n{state['dist_a']:.1f} km", ha='center', va='bottom', fontsize=14, fontweight='bold')
+            ax.text(axis_range * 0.5, len(merged), f"{state['name_b']}\n{state['dist_b']:.1f} km", ha='center', va='bottom', fontsize=14, fontweight='bold')
+            ax.text(axis_range * 0.95, len(merged), f"Race B has:\n(Difference)", ha='right', va='bottom', fontsize=11, fontweight='bold', color='#555')
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.xaxis.set_visible(False)
+            ax.tick_params(axis='y', which='both', length=0)
+            
+            # Central dividing line
+            ax.axvline(0, color='black', linewidth=1)
+
+            # Logo
+            logo_path = "Logo.png"
+            if os.path.exists(logo_path):
+                logo_img = plt.imread(logo_path)
+                imagebox = OffsetImage(logo_img, zoom=0.15, alpha=0.8)
+                ab = AnnotationBbox(imagebox, (0.02, 0.05), xycoords='axes fraction', frameon=False, box_alignment=(0, 0))
+                ax.add_artist(ab)
+
+            plt.tight_layout()
+            display(fig, target="plot-area", append=False)
+            display("✅ Comparison complete.", target="output", append=False)
+
+        @when("change", "#file-a")
+        async def load_a(event):
+            file_list = event.target.files
+            if not file_list: return
+            display("⏳ Parsing Race A...", target="output", append=False)
+            file = file_list.item(0)
+            state["name_a"] = file.name.replace(".gpx", "")
+            
+            array_buf = await file.arrayBuffer()
+            content = array_buf.to_bytes().decode("utf-8")
+            state["df_a"], state["dist_a"] = process_gpx_data(content)
+            
+            if state["df_b"] is not None:
+                draw_chart()
+            else:
+                display(f"✅ Race A loaded. Waiting for Race B...", target="output", append=False)
+
+        @when("change", "#file-b")
+        async def load_b(event):
+            file_list = event.target.files
+            if not file_list: return
+            display("⏳ Parsing Race B...", target="output", append=False)
+            file = file_list.item(0)
+            state["name_b"] = file.name.replace(".gpx", "")
+            
+            array_buf = await file.arrayBuffer()
+            content = array_buf.to_bytes().decode("utf-8")
+            state["df_b"], state["dist_b"] = process_gpx_data(content)
+            
+            if state["df_a"] is not None:
+                draw_chart()
+            else:
+                display(f"✅ Race B loaded. Waiting for Race A...", target="output", append=False)
+
+        @when("change", "#view-mode")
+        def change_view(event):
+            state["metric"] = document.getElementById("view-mode").value
+            if state["df_a"] is not None and state["df_b"] is not None:
+                draw_chart()
+    </script>
+</body>
+</html>
