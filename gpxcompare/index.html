@@ -161,18 +161,24 @@
 
         async function fetchEvents(side) {
             try {
-                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${BASE_PATH}`);
+                // Encode path to handle spaces
+                const encodedPath = encodeURIComponent(BASE_PATH);
+                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${encodedPath}`);
                 let data = await res.json();
+                
                 let eventSelect = document.getElementById(`event-${side}`);
                 eventSelect.innerHTML = '<option value="">Select Event...</option>';
-                data.forEach(item => {
-                    if (item.type === 'dir') {
-                        let opt = document.createElement('option');
-                        opt.value = item.name;
-                        opt.text = item.name;
-                        eventSelect.appendChild(opt);
-                    }
-                });
+                
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        if (item.type === 'dir') {
+                            let opt = document.createElement('option');
+                            opt.value = item.name;
+                            opt.text = item.name;
+                            eventSelect.appendChild(opt);
+                        }
+                    });
+                }
             } catch (e) {
                 console.error("Error fetching events", e);
             }
@@ -185,18 +191,26 @@
                 return;
             }
             try {
-                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${BASE_PATH}/${eventName}`);
+                // Encode both the base path and the event name to handle spaces in folder names
+                const fullPath = `${BASE_PATH}/${eventName}`;
+                const encodedPath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+                
+                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${encodedPath}`);
                 let data = await res.json();
+                
                 raceSelect.innerHTML = '<option value="">Select Distance/Year...</option>';
-                data.forEach(item => {
-                    if (item.name.endsWith('.gpx')) {
-                        let opt = document.createElement('option');
-                        opt.value = item.download_url; 
-                        opt.text = item.name.replace('.gpx', '');
-                        raceSelect.appendChild(opt);
-                    }
-                });
-                raceSelect.style.display = 'block';
+                
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        if (item.name.endsWith('.gpx')) {
+                            let opt = document.createElement('option');
+                            opt.value = item.download_url; 
+                            opt.text = item.name.replace('.gpx', '');
+                            raceSelect.appendChild(opt);
+                        }
+                    });
+                    raceSelect.style.display = 'block';
+                }
             } catch (e) {
                 console.error("Error fetching races", e);
             }
