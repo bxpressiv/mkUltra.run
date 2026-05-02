@@ -144,36 +144,37 @@
             if metric == "perc":
                 vals = summary['Perc']
                 xlabel = "Percentage of Total Distance (%)"
+                unit = "%"
+                fmt = ".1f"
             elif metric == "mi":
                 vals = summary['Distance_km'] * KM_TO_MI
                 xlabel = "Distance (miles)"
+                unit = "mi"
+                fmt = ".2f"
             else:
                 vals = summary['Distance_km']
                 xlabel = "Distance (km)"
+                unit = "km"
+                fmt = ".2f"
 
             cmap = LinearSegmentedColormap.from_list("vv", CUSTOM_COLORS[::-1], N=len(summary))
             bars = ax.barh(summary['Bin'], vals, color=[cmap(i) for i in range(len(summary))])
 
             max_val = vals.max()
-            ax.set_xlim(0, max_val * 1.45)
+            ax.set_xlim(0, max_val * 1.35)
             
             for i, bar in enumerate(bars):
                 val = vals.iloc[i]
-                perc = summary['Perc'].iloc[i]
                 if val > 0:
-                    if metric == "perc":
-                        label_text = f"{val:.1f}%"
-                    else:
-                        unit = "mi" if metric == "mi" else "km"
-                        label_text = f"{val:.2f}{unit} ({perc:.1f}%)"
-                    
+                    label_text = f"{val:{fmt}}{unit}"
                     ax.text(bar.get_width() + (max_val * 0.02), bar.get_y() + bar.get_height()/2, 
                             label_text, va='center', fontweight='bold', fontsize=10)
 
             if os.path.exists("Logo.png"):
                 try:
                     logo_img = plt.imread("Logo.png")
-                    imagebox = OffsetImage(logo_img, zoom=0.15, alpha=0.8)
+                    # Logo size reduced by 10% (from 0.15 to 0.135)
+                    imagebox = OffsetImage(logo_img, zoom=0.135, alpha=0.8)
                     ab = AnnotationBbox(imagebox, (0.98, 0.05), xycoords='axes fraction', frameon=False, box_alignment=(1, 0))
                     ax.add_artist(ab)
                 except: pass
