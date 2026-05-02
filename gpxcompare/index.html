@@ -106,7 +106,6 @@
 
     <div id="plot-area"></div>
 
-    <!-- Dropdown now positioned beneath the chart and hidden by default -->
     <div id="view-mode-container" class="view-mode-container" style="display: none;">
         <label for="view-mode" style="font-weight: bold; margin-right: 10px;">Comparison Metric:</label>
         <select id="view-mode">
@@ -118,7 +117,7 @@
     <py-config>
         packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
         [[fetch]]
-        files = ["../gpx2vert/Logo.png"]
+        files = ["Logo.png"]
     </py-config>
 
     <script type="py">
@@ -241,9 +240,7 @@
             plt.tight_layout()
             display(fig, target="plot-area", append=False)
             
-            # Show the comparison metric dropdown once the chart is ready
             document.getElementById("view-mode-container").style.display = "block"
-            
             display("✅ Comparison complete.", target="output", append=False)
 
         @when("change", "#file-a")
