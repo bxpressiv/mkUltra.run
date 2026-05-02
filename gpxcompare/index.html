@@ -47,7 +47,10 @@
 
         .view-mode-container {
             text-align: center;
-            margin-bottom: 20px;
+            margin-top: 25px;
+            padding: 15px;
+            background: #fdfdfd;
+            border-top: 1px solid #eee;
         }
         .view-mode-container select {
             width: auto;
@@ -96,19 +99,21 @@
             <input type="file" id="file-b" accept=".gpx">
         </div>
     </div>
+    
+    <div id="output">
+        <span class="loading">Initialising mkUltra engine...</span>
+    </div>
 
-    <div class="view-mode-container">
+    <div id="plot-area"></div>
+
+    <!-- Dropdown now positioned beneath the chart and hidden by default -->
+    <div id="view-mode-container" class="view-mode-container" style="display: none;">
         <label for="view-mode" style="font-weight: bold; margin-right: 10px;">Comparison Metric:</label>
         <select id="view-mode">
             <option value="km">Distance (km)</option>
             <option value="perc">Percentage (%)</option>
         </select>
     </div>
-    
-    <div id="output">
-        <span class="loading">Initialising mkUltra engine...</span>
-    </div>
-    <div id="plot-area"></div>
 
     <py-config>
         packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
@@ -175,7 +180,7 @@
 
         def draw_chart():
             if state["df_a"] is None or state["df_b"] is None:
-                return # Need both files
+                return 
 
             plt.close('all')
             fig, ax = plt.subplots(figsize=(12, 9))
@@ -191,9 +196,7 @@
             colors = [cmap(i) for i in range(len(LABELS))]
             y_pos = np.arange(len(merged))
 
-            # Left Bars (Race A - Negative layout)
             bars_a = ax.barh(y_pos, -merged[f'{x_col}_a'], color=colors, height=0.7)
-            # Right Bars (Race B - Positive layout)
             bars_b = ax.barh(y_pos, merged[f'{x_col}_b'], color=colors, height=0.7)
 
             max_val = max(merged[f'{x_col}_a'].max(), merged[f'{x_col}_b'].max())
@@ -202,7 +205,6 @@
             ax.set_yticks(y_pos)
             ax.set_yticklabels(merged['Bin'], fontweight='bold')
 
-            # Annotations on bars
             for i in range(len(merged)):
                 val_a = merged.loc[i, f'{x_col}_a']
                 val_b = merged.loc[i, f'{x_col}_b']
@@ -213,13 +215,11 @@
                 if val_b > 0.05:
                     ax.text(val_b + (max_val * 0.02), i, f"{val_b:.1f}{unit}", va='center', ha='left', fontsize=9)
 
-                # Delta column on far right
                 if abs(delta) > 0.05:
                     color = "black" if abs(delta) <= 0.1 else ("#d63131" if delta > 0 else "#3197e9")
                     prefix = "+" if delta > 0 else ""
                     ax.text(axis_range * 0.95, i, f"{prefix}{delta:.1f}{unit}", va='center', ha='right', color=color, fontweight='bold', fontsize=10)
 
-            # Titles and Headers
             ax.text(-axis_range * 0.5, len(merged), f"{state['name_a']}\n{state['dist_a']:.1f} km", ha='center', va='bottom', fontsize=14, fontweight='bold')
             ax.text(axis_range * 0.5, len(merged), f"{state['name_b']}\n{state['dist_b']:.1f} km", ha='center', va='bottom', fontsize=14, fontweight='bold')
             ax.text(axis_range * 0.95, len(merged), f"Race B has:\n(Difference)", ha='right', va='bottom', fontsize=11, fontweight='bold', color='#555')
@@ -229,11 +229,8 @@
             ax.spines['left'].set_visible(False)
             ax.xaxis.set_visible(False)
             ax.tick_params(axis='y', which='both', length=0)
-            
-            # Central dividing line
             ax.axvline(0, color='black', linewidth=1)
 
-            # Logo
             logo_path = "Logo.png"
             if os.path.exists(logo_path):
                 logo_img = plt.imread(logo_path)
@@ -243,6 +240,10 @@
 
             plt.tight_layout()
             display(fig, target="plot-area", append=False)
+            
+            # Show the comparison metric dropdown once the chart is ready
+            document.getElementById("view-mode-container").style.display = "block"
+            
             display("✅ Comparison complete.", target="output", append=False)
 
         @when("change", "#file-a")
@@ -252,11 +253,9 @@
             display("⏳ Parsing Race A...", target="output", append=False)
             file = file_list.item(0)
             state["name_a"] = file.name.replace(".gpx", "")
-            
             array_buf = await file.arrayBuffer()
             content = array_buf.to_bytes().decode("utf-8")
             state["df_a"], state["dist_a"] = process_gpx_data(content)
-            
             if state["df_b"] is not None:
                 draw_chart()
             else:
@@ -269,11 +268,9 @@
             display("⏳ Parsing Race B...", target="output", append=False)
             file = file_list.item(0)
             state["name_b"] = file.name.replace(".gpx", "")
-            
             array_buf = await file.arrayBuffer()
             content = array_buf.to_bytes().decode("utf-8")
             state["df_b"], state["dist_b"] = process_gpx_data(content)
-            
             if state["df_a"] is not None:
                 draw_chart()
             else:
