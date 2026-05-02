@@ -205,13 +205,21 @@
                 val_b = merged.loc[i, f'{x_col}_b']
                 delta = merged.loc[i, 'delta']
 
-                if val_a > 0:
+                if val_a > 0.01:
                     ax.text(-val_a - (max_val * 0.02), i, f"{val_a:.1f}{unit}", va='center', ha='right', fontsize=9)
-                if val_b > 0:
+                if val_b > 0.01:
                     ax.text(val_b + (max_val * 0.02), i, f"{val_b:.1f}{unit}", va='center', ha='left', fontsize=9)
 
-                color = "#d63131" if delta > 0 else ("#3197e9" if delta < 0 else "#666666")
-                prefix = "+" if delta > 0 else ""
+                if delta > 0.001:
+                    color = "#d63131"
+                    prefix = "+"
+                elif delta < -0.001:
+                    color = "#3197e9"
+                    prefix = ""
+                else:
+                    color = "#888888"
+                    prefix = ""
+                
                 ax.text(axis_range * 0.95, i, f"{prefix}{delta:.1f}{unit}", va='center', ha='right', color=color, fontweight='bold', fontsize=10)
 
             ax.text(-axis_range * 0.5, len(merged), f"{state['name_a']}\n{state['dist_a']:.1f} km", ha='center', va='bottom', fontsize=12, fontweight='bold')
