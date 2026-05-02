@@ -49,18 +49,17 @@
         
         .view-mode-container {
             text-align: center;
-            margin-top: 15px;
-            padding: 10px;
+            margin-top: 25px;
+            padding: 15px;
             background: #fdfdfd;
-            border: 1px solid #eee;
-            border-radius: 8px;
+            border-top: 1px solid #eee;
         }
         .radio-group {
             display: inline-flex;
             gap: 20px;
             justify-content: center;
             align-items: center;
-            margin-top: 5px;
+            margin-top: 10px;
         }
         .radio-option {
             display: flex;
@@ -81,6 +80,12 @@
     
     <input type="file" id="file-upload" accept=".gpx">
     
+    <div id="output">
+        <span class="loading">Initialising mkUltra engine... Loading analysis libraries.</span>
+    </div>
+
+    <div id="plot-area"></div>
+
     <div id="view-mode-container" class="view-mode-container" style="display: none;">
         <div style="font-weight: bold; margin-bottom: 5px;">View Metric:</div>
         <div class="radio-group">
@@ -95,12 +100,6 @@
             </label>
         </div>
     </div>
-
-    <div id="output">
-        <span class="loading">Initialising mkUltra engine... Loading analysis libraries.</span>
-    </div>
-
-    <div id="plot-area"></div>
 
     <py-config>
         packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
@@ -119,7 +118,6 @@
         import re
         import os
 
-        # State management
         state = {
             "summary_df": None,
             "total_dist_km": 0,
@@ -143,33 +141,35 @@
             summary = state["summary_df"].copy()
             metric = state["metric"]
             
-            # Determine values and labels based on metric
             if metric == "perc":
                 vals = summary['Perc']
-                unit = "%"
                 xlabel = "Percentage of Total Distance (%)"
             elif metric == "mi":
                 vals = summary['Distance_km'] * KM_TO_MI
-                unit = "mi"
                 xlabel = "Distance (miles)"
             else:
                 vals = summary['Distance_km']
-                unit = "km"
                 xlabel = "Distance (km)"
 
             cmap = LinearSegmentedColormap.from_list("vv", CUSTOM_COLORS[::-1], N=len(summary))
             bars = ax.barh(summary['Bin'], vals, color=[cmap(i) for i in range(len(summary))])
 
             max_val = vals.max()
-            ax.set_xlim(0, max_val * 1.3)
+            ax.set_xlim(0, max_val * 1.45)
             
             for i, bar in enumerate(bars):
                 val = vals.iloc[i]
+                perc = summary['Perc'].iloc[i]
                 if val > 0:
+                    if metric == "perc":
+                        label_text = f"{val:.1f}%"
+                    else:
+                        unit = "mi" if metric == "mi" else "km"
+                        label_text = f"{val:.2f}{unit} ({perc:.1f}%)"
+                    
                     ax.text(bar.get_width() + (max_val * 0.02), bar.get_y() + bar.get_height()/2, 
-                            f"{val:.2f}{unit}", va='center', fontweight='bold', fontsize=10)
+                            label_text, va='center', fontweight='bold', fontsize=10)
 
-            # Logo handling
             if os.path.exists("Logo.png"):
                 try:
                     logo_img = plt.imread("Logo.png")
