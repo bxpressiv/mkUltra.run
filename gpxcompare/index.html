@@ -19,7 +19,6 @@
         h1 { font-size: 1.8rem; margin-bottom: 5px; }
         .subtitle { color: gray; font-size: 0.9rem; font-style: italic; margin-top: 0; }
         
-        /* Updated to be static and centered */
         .controls-grid {
             display: flex;
             flex-wrap: wrap;
@@ -30,11 +29,11 @@
             padding: 15px;
             border-radius: 8px;
             border: 1px solid #ddd;
-            max-width: 800px; /* Limits the width so it doesn't stretch too far */
+            max-width: 800px;
         }
         
         .upload-box { 
-            flex: 0 1 350px; /* Prevents stretching, allows shrinking on small screens */
+            flex: 0 1 350px;
             display: flex; 
             flex-direction: column; 
         }
@@ -114,6 +113,7 @@
         <label for="view-mode" style="font-weight: bold; margin-right: 10px;">Comparison Metric:</label>
         <select id="view-mode" style="width: auto; min-width: 200px; display: inline-block;">
             <option value="km">Distance (km)</option>
+            <option value="mi">Distance (mi)</option>
             <option value="perc">Percentage (%)</option>
         </select>
     </div>
@@ -141,6 +141,7 @@
             "metric": "km"
         }
 
+        KM_TO_MI = 0.621371
         SMOOTHING_WINDOW = 10
         BINS = [-np.inf, -22.5, -17.5, -12.5, -7.5, -2.5, 2.5, 7.5, 12.5, 17.5, 22.5, np.inf]
         LABELS = ["-27.5 to -22.5 %", "-22.5 to -17.5 %", "-17.5 to -12.5 %", "-12.5 to -7.5 %", "-7.5 to -2.5 %", "-2.5 to 2.5 %", "2.5 to 7.5 %", "7.5 to 12.5 %", "12.5 to 17.5 %", "17.5 to 22.5 %", "22.5 to 27.5 %"]
@@ -188,10 +189,24 @@
             plt.close('all')
             fig, ax = plt.subplots(figsize=(10, 8))
             
-            x_col = 'Distance_km' if state["metric"] == "km" else 'Perc'
-            unit = "km" if state["metric"] == "km" else "%"
+            metric = state["metric"]
+            unit = metric
+            
+            # Create working copy of summaries
+            df_a_working = state["df_a"].copy()
+            df_b_working = state["df_b"].copy()
 
-            merged = pd.merge(state["df_a"][['Bin', x_col, 'sort']], state["df_b"][['Bin', x_col]], on='Bin', how='outer', suffixes=('_a', '_b')).fillna(0)
+            if metric == "perc":
+                x_col = "Perc"
+                unit = "%"
+            elif metric == "mi":
+                df_a_working["Distance_mi"] = df_a_working["Distance_km"] * KM_TO_MI
+                df_b_working["Distance_mi"] = df_b_working["Distance_km"] * KM_TO_MI
+                x_col = "Distance_mi"
+            else:
+                x_col = "Distance_km"
+
+            merged = pd.merge(df_a_working[['Bin', x_col, 'sort']], df_b_working[['Bin', x_col]], on='Bin', how='outer', suffixes=('_a', '_b')).fillna(0)
             merged['delta'] = merged[f'{x_col}_b'] - merged[f'{x_col}_a']
             merged = merged.sort_values('sort').reset_index(drop=True)
 
@@ -213,9 +228,9 @@
                 val_b = merged.loc[i, f'{x_col}_b']
                 delta = merged.loc[i, 'delta']
 
-                if val_a > 0.01:
+                if val_a > 0.005:
                     ax.text(-val_a - (max_val * 0.02), i, f"{val_a:.1f}{unit}", va='center', ha='right', fontsize=9)
-                if val_b > 0.01:
+                if val_b > 0.005:
                     ax.text(val_b + (max_val * 0.02), i, f"{val_b:.1f}{unit}", va='center', ha='left', fontsize=9)
 
                 if delta > 0.001:
@@ -230,8 +245,13 @@
                 
                 ax.text(axis_range * 0.95, i, f"{prefix}{delta:.1f}{unit}", va='center', ha='right', color=color, fontweight='bold', fontsize=10)
 
-            ax.text(-axis_range * 0.5, len(merged), f"{state['name_a']}\n{state['dist_a']:.1f} km", ha='center', va='bottom', fontsize=12, fontweight='bold')
-            ax.text(axis_range * 0.5, len(merged), f"{state['name_b']}\n{state['dist_b']:.1f} km", ha='center', va='bottom', fontsize=12, fontweight='bold')
+            # Labels for overall distance
+            dist_a_display = state['dist_a'] if metric != "mi" else state['dist_a'] * KM_TO_MI
+            dist_b_display = state['dist_b'] if metric != "mi" else state['dist_b'] * KM_TO_MI
+            label_unit = metric if metric != "perc" else "km"
+
+            ax.text(-axis_range * 0.5, len(merged), f"{state['name_a']}\n{dist_a_display:.1f} {label_unit}", ha='center', va='bottom', fontsize=12, fontweight='bold')
+            ax.text(axis_range * 0.5, len(merged), f"{state['name_b']}\n{dist_b_display:.1f} {label_unit}", ha='center', va='bottom', fontsize=12, fontweight='bold')
             ax.text(axis_range * 0.95, len(merged), "Difference", ha='right', va='bottom', fontsize=10, fontweight='bold', color='#555')
 
             ax.spines['top'].set_visible(False)
