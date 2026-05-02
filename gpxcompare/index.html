@@ -19,18 +19,26 @@
         h1 { font-size: 1.8rem; margin-bottom: 5px; }
         .subtitle { color: gray; font-size: 0.9rem; font-style: italic; margin-top: 0; }
         
+        /* Updated to be static and centered */
         .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
             gap: 15px;
-            margin-bottom: 20px;
+            margin: 0 auto 20px auto;
             background: #f9f9f9;
             padding: 15px;
             border-radius: 8px;
             border: 1px solid #ddd;
+            max-width: 800px; /* Limits the width so it doesn't stretch too far */
         }
         
-        .upload-box { display: flex; flex-direction: column; }
+        .upload-box { 
+            flex: 0 1 350px; /* Prevents stretching, allows shrinking on small screens */
+            display: flex; 
+            flex-direction: column; 
+        }
+        
         .upload-box label { font-weight: bold; margin-bottom: 5px; color: #444; }
         
         input[type="file"], select { 
