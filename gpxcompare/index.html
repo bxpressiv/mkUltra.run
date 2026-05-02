@@ -45,6 +45,12 @@
             background: white;
         }
 
+        .mode-select {
+            margin-bottom: 15px;
+            font-weight: bold;
+            background: #eeeeee;
+        }
+
         .view-mode-container {
             text-align: center;
             margin-top: 25px;
@@ -86,17 +92,50 @@
 <body>
     <div class="header">
         <h1>GPXcompare by mkUltra.run</h1>
-        <p class="subtitle">Upload two GPX files to compare gradient profiles. Best viewed on a tablet or desktop computer.</p>
+        <p class="subtitle">Upload two GPX files or choose from the library to compare gradient profiles. Best viewed on a tablet or desktop computer.</p>
     </div>
 
     <div class="controls-grid">
         <div class="upload-box">
-            <label for="file-a">🏃 GPX File A (Left)</label>
-            <input type="file" id="file-a" accept=".gpx">
+            <label>🏃 Race A (Left)</label>
+            <select id="mode-a" class="mode-select" onchange="toggleMode('a')">
+                <option value="upload">Upload GPX File</option>
+                <option value="library">Select from Library</option>
+            </select>
+
+            <div id="upload-div-a">
+                <input type="file" id="file-a" accept=".gpx">
+            </div>
+
+            <div id="library-div-a" style="display: none;">
+                <select id="event-a" onchange="fetchRaces('a', this.value)">
+                    <option value="">Select Event...</option>
+                </select>
+                <select id="race-a" style="display: none; margin-top: 10px;">
+                    <option value="">Select Distance/Year...</option>
+                </select>
+            </div>
         </div>
+        
         <div class="upload-box">
-            <label for="file-b">🏃 GPX File B (Right)</label>
-            <input type="file" id="file-b" accept=".gpx">
+            <label>🏃 Race B (Right)</label>
+            <select id="mode-b" class="mode-select" onchange="toggleMode('b')">
+                <option value="upload">Upload GPX File</option>
+                <option value="library">Select from Library</option>
+            </select>
+
+            <div id="upload-div-b">
+                <input type="file" id="file-b" accept=".gpx">
+            </div>
+
+            <div id="library-div-b" style="display: none;">
+                <select id="event-b" onchange="fetchRaces('b', this.value)">
+                    <option value="">Select Event...</option>
+                </select>
+                <select id="race-b" style="display: none; margin-top: 10px;">
+                    <option value="">Select Distance/Year...</option>
+                </select>
+            </div>
         </div>
     </div>
     
@@ -114,6 +153,70 @@
         </select>
     </div>
 
+    <script>
+        // CONFIGURATION FOR YOUR REPO STRUCTURE
+        const GITHUB_USER = "bxpressiv"; 
+        const GITHUB_REPO = "mkUltra.run";
+        const BASE_PATH = "gpxcompare/race_data";
+
+        async function fetchEvents(side) {
+            try {
+                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${BASE_PATH}`);
+                let data = await res.json();
+                let eventSelect = document.getElementById(`event-${side}`);
+                eventSelect.innerHTML = '<option value="">Select Event...</option>';
+                data.forEach(item => {
+                    if (item.type === 'dir') {
+                        let opt = document.createElement('option');
+                        opt.value = item.name;
+                        opt.text = item.name;
+                        eventSelect.appendChild(opt);
+                    }
+                });
+            } catch (e) {
+                console.error("Error fetching events", e);
+            }
+        }
+
+        async function fetchRaces(side, eventName) {
+            let raceSelect = document.getElementById(`race-${side}`);
+            if (!eventName) {
+                raceSelect.style.display = 'none';
+                return;
+            }
+            try {
+                let res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${BASE_PATH}/${eventName}`);
+                let data = await res.json();
+                raceSelect.innerHTML = '<option value="">Select Distance/Year...</option>';
+                data.forEach(item => {
+                    if (item.name.endsWith('.gpx')) {
+                        let opt = document.createElement('option');
+                        opt.value = item.download_url; 
+                        opt.text = item.name.replace('.gpx', '');
+                        raceSelect.appendChild(opt);
+                    }
+                });
+                raceSelect.style.display = 'block';
+            } catch (e) {
+                console.error("Error fetching races", e);
+            }
+        }
+
+        function toggleMode(side) {
+            let mode = document.getElementById(`mode-${side}`).value;
+            if (mode === 'upload') {
+                document.getElementById(`upload-div-${side}`).style.display = 'block';
+                document.getElementById(`library-div-${side}`).style.display = 'none';
+            } else {
+                document.getElementById(`upload-div-${side}`).style.display = 'none';
+                document.getElementById(`library-div-${side}`).style.display = 'block';
+                if (document.getElementById(`event-${side}`).options.length <= 1) {
+                    fetchEvents(side);
+                }
+            }
+        }
+    </script>
+
     <py-config>
         packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
         [[fetch]]
@@ -128,6 +231,7 @@
         import matplotlib.pyplot as plt
         from matplotlib.colors import LinearSegmentedColormap
         from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        from pyodide.http import pyfetch
         import re
         import os
 
@@ -143,7 +247,7 @@
         LABELS = ["-27.5 to -22.5 %", "-22.5 to -17.5 %", "-17.5 to -12.5 %", "-12.5 to -7.5 %", "-7.5 to -2.5 %", "-2.5 to 2.5 %", "2.5 to 7.5 %", "7.5 to 12.5 %", "12.5 to 17.5 %", "17.5 to 22.5 %", "22.5 to 27.5 %"]
         CUSTOM_COLORS = ["#803131", "#d63131", "#e77d31", "#efe331", "#d3d388", "#31d431", "#7fd1af", "#4ee6e6", "#3197e9", "#3b36db", "#682d94"]
 
-        display("✅ Engine ready. Upload both GPX files to generate the comparison.", target="output", append=False)
+        display("✅ Engine ready. Choose your comparison method.", target="output", append=False)
 
         def process_gpx_data(gpx_data):
             gpx = gpxpy.parse(gpx_data)
@@ -243,11 +347,12 @@
             document.getElementById("view-mode-container").style.display = "block"
             display("✅ Comparison complete.", target="output", append=False)
 
+        # File Upload Handlers
         @when("change", "#file-a")
         async def load_a(event):
             file_list = event.target.files
             if not file_list: return
-            display("⏳ Parsing Race A...", target="output", append=False)
+            display("⏳ Parsing Race A from file...", target="output", append=False)
             file = file_list.item(0)
             state["name_a"] = file.name.replace(".gpx", "")
             array_buf = await file.arrayBuffer()
@@ -262,7 +367,7 @@
         async def load_b(event):
             file_list = event.target.files
             if not file_list: return
-            display("⏳ Parsing Race B...", target="output", append=False)
+            display("⏳ Parsing Race B from file...", target="output", append=False)
             file = file_list.item(0)
             state["name_b"] = file.name.replace(".gpx", "")
             array_buf = await file.arrayBuffer()
@@ -273,6 +378,42 @@
             else:
                 display(f"✅ Race B loaded. Waiting for Race A...", target="output", append=False)
 
+        # Library Fetch Handlers
+        @when("change", "#race-a")
+        async def load_library_a(event):
+            url = event.target.value
+            if not url: return
+            name = event.target.options[event.target.selectedIndex].text
+            display(f"⏳ Fetching {name} from library...", target="output", append=False)
+            
+            response = await pyfetch(url)
+            content = await response.string()
+            
+            state["name_a"] = name
+            state["df_a"], state["dist_a"] = process_gpx_data(content)
+            if state["df_b"] is not None:
+                draw_chart()
+            else:
+                display(f"✅ Race A loaded. Waiting for Race B...", target="output", append=False)
+
+        @when("change", "#race-b")
+        async def load_library_b(event):
+            url = event.target.value
+            if not url: return
+            name = event.target.options[event.target.selectedIndex].text
+            display(f"⏳ Fetching {name} from library...", target="output", append=False)
+            
+            response = await pyfetch(url)
+            content = await response.string()
+            
+            state["name_b"] = name
+            state["df_b"], state["dist_b"] = process_gpx_data(content)
+            if state["df_a"] is not None:
+                draw_chart()
+            else:
+                display(f"✅ Race B loaded. Waiting for Race A...", target="output", append=False)
+
+        # View Mode Handler
         @when("change", "#view-mode")
         def change_view(event):
             state["metric"] = document.getElementById("view-mode").value
