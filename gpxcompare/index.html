@@ -244,7 +244,7 @@
             if os.path.exists("Logo.png"):
                 try:
                     logo_img = plt.imread("Logo.png")
-                    imagebox = OffsetImage(logo_img, zoom=0.15, alpha=0.8)
+                    imagebox = OffsetImage(logo_img, zoom=0.11, alpha=0.8)
                     ab = AnnotationBbox(imagebox, (0.02, 0.05), xycoords='axes fraction', frameon=False, box_alignment=(0, 0))
                     ax.add_artist(ab)
                 except: pass
