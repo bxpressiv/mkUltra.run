@@ -2,36 +2,71 @@
 <html lang="en-AU">
 <head>
     <meta charset="utf-8">
+    <!-- This meta tag is the most important fix for mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mkUltra.run gpx2vert analyser</title>
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 900px; margin: auto; color: #333; }
-        #output { margin-top: 20px; padding: 15px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 4px; min-height: 20px; line-height: 1.5; }
-        #plot-area { margin-top: 20px; width: 100%; display: flex; justify-content: center; }
-        input { margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; width: 100%; box-sizing: border-box; }
-        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; text-align: center; }
+        body { 
+            font-family: sans-serif; 
+            padding: 15px; 
+            max-width: 900px; 
+            margin: auto; 
+            color: #333; 
+            box-sizing: border-box; /* Prevents padding from breaking width */
+        }
+        #output { 
+            margin-top: 20px; 
+            padding: 15px; 
+            border: 1px solid #ccc; 
+            background: #f9f9f9; 
+            border-radius: 4px; 
+            min-height: 20px; 
+            line-height: 1.5; 
+            font-size: 0.9rem;
+        }
+        #plot-area { 
+            margin-top: 20px; 
+            width: 100%; 
+            display: flex; 
+            justify-content: center;
+            overflow-x: auto; /* Allows horizontal swipe if chart is wide */
+        }
+        /* Forces the Matplotlib image to scale to the screen width */
+        #plot-area img, #plot-area canvas {
+            max-width: 100%;
+            height: auto !important;
+        }
+        input { 
+            margin: 10px 0; 
+            padding: 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            width: 100%; 
+            box-sizing: border-box; 
+            font-size: 1rem; /* Prevents iOS from zooming in on tap */
+        }
+        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; text-align: center; font-size: 1.6rem; }
         py-config { display: none !important; }
         
-        /* Loading Pulse Animation */
         .loading { font-style: italic; color: #666; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
     <h1>mkUltra.run gpx2vert analyser</h1>
-    <p style="text-align: center; color: gray;">Upload a GPX file to see your distance breakdown by gradient.</p>
+    <p style="text-align: center; color: gray; font-size: 0.9rem;">Upload a GPX file to see your distance breakdown by gradient.</p>
     <input type="file" id="file-upload" accept=".gpx">
     
     <div id="output">
-        <span class="loading">Initialising mkUltra engine... To keep this tool free, it takes about 15 seconds to load the analysis libraries on your first visit. It will be faster next time.</span>
+        <span class="loading">Initialising mkUltra engine... Loading analysis libraries. It will be faster next time.</span>
     </div>
     <div id="plot-area"></div>
 
     <py-config>
         packages = ["pandas", "gpxpy", "numpy", "matplotlib"]
         [[fetch]]
-        # Updated to fetch from the local folder path
-        files = ["Logo.png", "GPX_vert_analysis.py"]
+        files = ["Logo.png"]
     </py-config>
 
     <script type="py">
@@ -45,7 +80,6 @@
         import re
         import os
 
-        # Core calculation logic
         SMOOTHING_WINDOW = 10
         
         display("✅ mkUltra engine ready. Please select your GPX file.", target="output", append=False)
@@ -99,17 +133,18 @@
                 summary = summary.sort_values('sort', ascending=True).reset_index(drop=True)
 
                 plt.close('all')
-                fig, ax = plt.subplots(figsize=(10, 6))
+                # Slightly taller ratio works better for mobile vertical scrolling
+                fig, ax = plt.subplots(figsize=(10, 8))
                 custom_colors = ["#803131", "#d63131", "#e77d31", "#efe331", "#d3d388", "#31d431", "#7fd1af", "#4ee6e6", "#3197e9", "#3b36db", "#682d94"]
                 cmap = LinearSegmentedColormap.from_list("vv", custom_colors[::-1], N=len(summary))
                 bars = ax.barh(summary['Bin'], summary['Distance_km'], color=[cmap(i) for i in range(len(summary))])
 
                 max_val = summary['Distance_km'].max()
-                ax.set_xlim(0, max_val * 1.3)
+                ax.set_xlim(0, max_val * 1.4) # Extra room for labels
                 for i, bar in enumerate(bars):
                     dist, perc = summary.loc[i, 'Distance_km'], summary.loc[i, 'Perc']
                     if dist > 0:
-                        ax.text(bar.get_width() + (max_val * 0.02), bar.get_y() + bar.get_height()/2, f"{dist:.2f}km ({perc:.1f}%)", va='center', fontweight='bold')
+                        ax.text(bar.get_width() + (max_val * 0.02), bar.get_y() + bar.get_height()/2, f"{dist:.2f}km ({perc:.1f}%)", va='center', fontweight='bold', fontsize=10)
 
                 logo_path = "Logo.png"
                 if os.path.exists(logo_path):
